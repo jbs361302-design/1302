@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>우리동네 실시간 미세먼지</title>
+    <style>
+        body { font-family: 'Malgun Gothic', sans-serif; text-align: center; background-color: #f4f7f6; }
+        .container { margin-top: 50px; padding: 20px; background: white; display: inline-block; border-radius: 15px; shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .dust-value { font-size: 3em; font-weight: bold; margin: 20px 0; }
+        .status { font-size: 1.5em; padding: 10px 20px; border-radius: 10px; color: white; }
+        .good { background-color: #32a1ff; } /* 좋음: 파랑 */
+        .normal { background-color: #00c73c; } /* 보통: 초록 */
+        .bad { background-color: #ffbb00; } /* 나쁨: 노랑 */
+        .very-bad { background-color: #ff4d4d; } /* 매우나쁨: 빨강 */
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>🌡️ 실시간 대기 오염 정보</h1>
+    <p id="location">서울 종로구 기준</p>
+    <div id="dustValue" class="dust-value">-</div>
+    <div id="statusLabel" class="status">데이터 로딩 중...</div>
+    <p id="updateTime" style="color: #666; font-size: 0.9em;"></p>
+</div>
+
+<script>
+    // 1. 발급받으신 인증키를 여기에 입력하세요
+    const SERVICE_KEY = '4f14a417674ceacf310b9f6fa979a5bed5411c14c57fcfac470a7afb1609b69e';
+    
+    async function getDustData() {
+        // API URL (서울 지역 예시)
+        const url = `https://apis.data.go.kr/B552584/ArpltnInforInqireSvc/getMsrstnAcctoRltmMesureDnsty?serviceKey=${SERVICE_KEY}&returnType=json&numOfRows=1&pageNo=1&stationName=${encodeURIComponent('종로구')}&dataTerm=DAILY&ver=1.0`;
+
+        try {
+            const response = await fetch(url);
+            const data = await response.json();
+            const item = data.response.body.items[0];
+
+            const pm10Value = item.pm10Value; // 미세먼지 농도
+            const dataTime = item.dataTime;   // 측정 시간
+
+            updateUI(pm10Value, dataTime);
+        } catch (error) {
+            console.error("데이터를 불러오는데 실패했습니다.", error);
+            document.getElementById('statusLabel').innerText = "데이터 오류";
+        }
+    }
+
+    function updateUI(value, time) {
+        const valueEl = document.getElementById('dustValue');
+        const labelEl = document.getElementById('statusLabel');
+        const timeEl = document.getElementById('updateTime');
+
+        valueEl.innerText = value + " ㎍/㎥";
+        timeEl.innerText = "측정시간: " + time;
+
+        // 농도에 따른 상태 및 색상 변경
+        if (value <= 30) {
+            labelEl.innerText = "좋음 😊";
+            labelEl.className = "status good";
+        } else if (value <= 80) {
+            labelEl.innerText = "보통 🙂";
+            labelEl.className = "status normal";
+        } else if (value <= 150) {
+            labelEl.innerText = "나쁨 😷";
+            labelEl.className = "status bad";
+        } else {
+            labelEl.innerText = "매우 나쁨 🚨";
+            labelEl.className = "status very-bad";
+        }
+    }
+
+    // 앱 실행
+    getDustData();
+</script>
+</body>
+</html>
