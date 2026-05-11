@@ -446,22 +446,16 @@
     '1': '좋음', '2': '보통', '3': '나쁨', '4': '매우나쁨', '5': '위험'
   };
 
-  function show(id) {
-    document.getElementById(id).classList.add('visible');
-  }
-  function hide(id) {
-    document.getElementById(id).classList.remove('visible');
-  }
+  function show(id) { document.getElementById(id).classList.add('visible'); }
+  function hide(id) { document.getElementById(id).classList.remove('visible'); }
 
   function applyGrade(cardId, valueId, gradeId, value, grade) {
     const card = document.getElementById(cardId);
-    const val = document.getElementById(valueId);
-    const gr = document.getElementById(gradeId);
-    // remove old grade classes
+    const val  = document.getElementById(valueId);
+    const gr   = document.getElementById(gradeId);
     card.className = 'gauge-card';
-    gr.className = 'gauge-status';
-    val.className = 'gauge-value';
-
+    gr.className   = 'gauge-status';
+    val.className  = 'gauge-value';
     val.textContent = value ?? '—';
     if (grade && gradeLabel[grade]) {
       const cls = 'grade-' + grade;
@@ -474,7 +468,8 @@
     }
   }
 
-  async function fetchData() {
+  // JSONP 방식으로 CORS 우회
+  function fetchData() {
     const station = document.getElementById('stationInput').value.trim();
     if (!station) { alert('측정소 이름을 입력하세요.'); return; }
 
@@ -483,55 +478,75 @@
     show('loadingBox');
     document.getElementById('searchBtn').disabled = true;
 
-    const url = `https://apis.data.go.kr/B552584/ArpltnInforInqireSvc/getMsrstnAcctoRltmMesureDnsty`
-      + `?serviceKey=${encodeURIComponent(API_KEY)}`
-      + `&returnType=json`
-      + `&numOfRows=1`
-      + `&pageNo=1`
-      + `&stationName=${encodeURIComponent(station)}`
-      + `&dataTerm=DAILY`
-      + `&ver=1.3`;
+    // 기존 JSONP 스크립트 태그 제거
+    const old = document.getElementById('jsonp-script');
+    if (old) old.remove();
+    if (window.__airCallback) delete window.__airCallback;
 
-    try {
-      const res = await fetch(url);
-      const json = await res.json();
-      const items = json?.response?.body?.items;
-
-      if (!items || items.length === 0) {
-        throw new Error('해당 측정소를 찾을 수 없습니다. 다른 이름을 입력해보세요.');
-      }
-
-      const d = items[0];
+    // 타임아웃 처리
+    const timer = setTimeout(() => {
       hide('loadingBox');
-
-      document.getElementById('stationName').textContent = station + ' 측정소';
-      document.getElementById('dataTime').textContent = '측정시각: ' + (d.dataTime ?? '—');
-
-      applyGrade('pm10Card', 'pm10Value', 'pm10Grade', d.pm10Value, d.pm10Grade);
-      applyGrade('pm25Card', 'pm25Value', 'pm25Grade', d.pm25Value, d.pm25Grade);
-
-      document.getElementById('o3Value').textContent = d.o3Value ?? '—';
-      document.getElementById('no2Value').textContent = d.no2Value ?? '—';
-      document.getElementById('coValue').textContent = d.coValue ?? '—';
-      document.getElementById('so2Value').textContent = d.so2Value ?? '—';
-
-      show('resultCard');
-
-    } catch (err) {
-      hide('loadingBox');
-      document.getElementById('errorMsg').textContent = err.message || '데이터 조회 실패';
+      document.getElementById('errorMsg').textContent = '요청 시간이 초과됐어요. 다시 시도해 주세요.';
       show('errorBox');
-    } finally {
       document.getElementById('searchBtn').disabled = false;
-    }
+    }, 10000);
+
+    // 콜백 함수 등록
+    window.__airCallback = function(json) {
+      clearTimeout(timer);
+      document.getElementById('searchBtn').disabled = false;
+      hide('loadingBox');
+
+      try {
+        const items = json?.response?.body?.items;
+        if (!items || items.length === 0) {
+          document.getElementById('errorMsg').textContent = '해당 측정소를 찾을 수 없어요. 다른 이름을 입력해 보세요.';
+          show('errorBox');
+          return;
+        }
+        const d = items[0];
+        document.getElementById('stationName').textContent = station + ' 측정소';
+        document.getElementById('dataTime').textContent = '측정시각: ' + (d.dataTime ?? '—');
+        applyGrade('pm10Card', 'pm10Value', 'pm10Grade', d.pm10Value, d.pm10Grade);
+        applyGrade('pm25Card', 'pm25Value', 'pm25Grade', d.pm25Value, d.pm25Grade);
+        document.getElementById('o3Value').textContent  = d.o3Value  ?? '—';
+        document.getElementById('no2Value').textContent = d.no2Value ?? '—';
+        document.getElementById('coValue').textContent  = d.coValue  ?? '—';
+        document.getElementById('so2Value').textContent = d.so2Value ?? '—';
+        show('resultCard');
+      } catch(e) {
+        document.getElementById('errorMsg').textContent = '데이터 파싱 오류: ' + e.message;
+        show('errorBox');
+      }
+    };
+
+    // JSONP 스크립트 삽입
+    const script = document.createElement('script');
+    script.id = 'jsonp-script';
+    script.src =
+      'https://apis.data.go.kr/B552584/ArpltnInforInqireSvc/getMsrstnAcctoRltmMesureDnsty'
+      + '?serviceKey=' + encodeURIComponent(API_KEY)
+      + '&callback=__airCallback'
+      + '&returnType=json'
+      + '&numOfRows=1'
+      + '&pageNo=1'
+      + '&stationName=' + encodeURIComponent(station)
+      + '&dataTerm=DAILY'
+      + '&ver=1.3';
+    script.onerror = () => {
+      clearTimeout(timer);
+      hide('loadingBox');
+      document.getElementById('errorMsg').textContent = 'API 호출에 실패했어요. API 키를 확인해 주세요.';
+      show('errorBox');
+      document.getElementById('searchBtn').disabled = false;
+    };
+    document.body.appendChild(script);
   }
 
-  // Enter key support
   document.getElementById('stationInput').addEventListener('keydown', e => {
     if (e.key === 'Enter') fetchData();
   });
 
-  // Auto-load on start
   window.addEventListener('load', fetchData);
 </script>
 </body>
